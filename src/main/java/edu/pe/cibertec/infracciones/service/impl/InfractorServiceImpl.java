@@ -7,11 +7,14 @@ import edu.pe.cibertec.infracciones.exception.VehiculoNotFoundException;
 import edu.pe.cibertec.infracciones.model.Infractor;
 import edu.pe.cibertec.infracciones.model.Vehiculo;
 import edu.pe.cibertec.infracciones.repository.InfractorRepository;
+import edu.pe.cibertec.infracciones.repository.MultaRepository;
 import edu.pe.cibertec.infracciones.repository.VehiculoRepository;
 import edu.pe.cibertec.infracciones.service.IInfractorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.util.List;
+import edu.pe.cibertec.infracciones.model.Multa;
+import edu.pe.cibertec.infracciones.model.EstadoMulta;
 
 @Service
 @RequiredArgsConstructor
@@ -19,6 +22,7 @@ public class InfractorServiceImpl implements IInfractorService {
 
     private final InfractorRepository infractorRepository;
     private final VehiculoRepository vehiculoRepository;
+    private final MultaRepository multaRepository;
 
     @Override
     public InfractorResponseDTO registrarInfractor(InfractorRequestDTO dto) {
@@ -54,6 +58,38 @@ public class InfractorServiceImpl implements IInfractorService {
                 .orElseThrow(() -> new VehiculoNotFoundException(vehiculoId));
         infractor.getVehiculos().add(vehiculo);
         infractorRepository.save(infractor);
+    }
+    @Override
+    public void desasignarVehiculo(Long infractorId, Long vehiculoId) {
+
+        Infractor infractor = infractorRepository.findById(infractorId)
+                .orElseThrow(() -> new InfractorNotFoundException(infractorId));
+        Vehiculo vehiculo = vehiculoRepository.findById(vehiculoId)
+                .orElseThrow(() -> new VehiculoNotFoundException(vehiculoId));
+        List<Multa> multasPendientes =
+                multaRepository.findByVehiculo_IdAndEstado(vehiculoId, EstadoMulta.PENDIENTE);
+        if (!multasPendientes.isEmpty()) {
+            throw new RuntimeException("El vehículo tiene multas pendientes");
+        }
+        infractor.getVehiculos().remove(vehiculo);
+        infractorRepository.save(infractor);
+    }
+
+    @Override
+    public Double calcularDeuda(Long infractorId) {
+
+        List<Multa> multas = multaRepository.findByInfractor_Id(infractorId);
+        double deuda = 0.0;
+
+        for (Multa multa : multas) {
+            if (multa.getEstado() == EstadoMulta.PENDIENTE) {
+                deuda += multa.getMonto();
+            }
+            if (multa.getEstado() == EstadoMulta.VENCIDA) {
+                deuda += multa.getMonto() * 1.15;
+            }
+        }
+        return deuda;
     }
 
 
